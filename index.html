@@ -98,7 +98,7 @@ function chips(id, opts, swatch) {
 }
 chips("place", PLACES); chips("color", COLORS, true); chips("moisture", MOISTURE);
 chips("roots", ROOTS); chips("fizz", FIZZ);
-for (const t of Object.keys(TEXTURES)) $("texture").add(new Option(t[0].toUpperCase() + t.slice(1), t));
+for (const t of Object.keys(TEXTURES).filter((t) => t !== "silt")) $("texture").add(new Option(t[0].toUpperCase() + t.slice(1), t));
 $("texture").add(new Option("Not sure", "unsure"));
 
 // ---- location: exact point lives only in this variable ----
