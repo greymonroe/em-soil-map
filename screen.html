@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Soil Map · Live</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root { --bg:#f6f3ec; --card:#fff; --ink:#1f2a22; --muted:#5d6b61; --line:#dcd6c8; --green:#2f7d4f; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:18px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; height:100vh; display:grid; grid-template-columns: 1fr 1.25fr; gap:18px; padding:18px; }
+  h1 { margin:0 0 4px; font-size:38px; }
+  .muted { color:var(--muted); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:14px; }
+  .left { display:flex; flex-direction:column; gap:12px; min-height:0; }
+  .right { display:flex; flex-direction:column; gap:10px; min-height:0; }
+  #map { flex:1; min-height:420px; border-radius:16px; }
+  .top { display:flex; justify-content:space-between; align-items:center; gap:16px; }
+  #qr img { width:160px; height:160px; background:#fff; border-radius:8px; }
+  .qrbox { text-align:center; font-size:13px; }
+  .totals { display:grid; grid-template-columns:repeat(3,1fr); text-align:center; }
+  .totals b { display:block; font-size:42px; }
+  .grow { flex:1; min-height:0; overflow:auto; }
+  table { width:100%; border-collapse:collapse; font-size:17px; }
+  th { text-align:left; color:var(--muted); font-weight:500; font-size:14px; padding:4px 6px; position:sticky; top:0; background:var(--card); }
+  td { padding:6px; border-top:1px solid var(--line); }
+  .ok { color:var(--green); font-weight:700; }
+  .no { color:#b3261e; font-weight:700; }
+  .tabs { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+  .tabs button { font:inherit; font-size:16px; border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:999px; padding:6px 12px; cursor:pointer; }
+  .tabs button.on { background:var(--green); color:#fff; border-color:var(--green); }
+  .legend { display:flex; flex-wrap:wrap; gap:10px; font-size:15px; }
+  .legend i { display:inline-block; width:14px; height:14px; border-radius:50%; margin-right:5px; vertical-align:-2px; border:1px solid rgba(0,0,0,.25); }
+  .sw { display:inline-block; width:12px; height:12px; border-radius:50%; margin-right:4px; border:1px solid rgba(0,0,0,.2); }
+</style>
+</head>
+<body>
+<div class="left">
+  <div class="top">
+    <div>
+      <h1>Soil Map</h1>
+      <div class="muted">What's under our feet? Our samples vs. the USDA soil survey.</div>
+    </div>
+    <div class="qrbox"><div id="qr"></div><div id="qrUrl" class="muted"></div></div>
+  </div>
+  <div class="card totals">
+    <div><b id="tN">0</b>samples</div>
+    <div><b id="tMatch">–</b>texture family matches survey</div>
+    <div><b id="tFizz">0</b>fizzed</div>
+  </div>
+  <div class="card grow">
+    <table><thead><tr><th>Sample</th><th>We measured</th><th>Survey says</th><th></th><th>pH us / survey</th></tr></thead>
+    <tbody id="rows"></tbody></table>
+  </div>
+</div>
+<div class="right">
+  <div class="tabs" id="tabs"><span class="muted">Color points by:</span></div>
+  <div id="map"></div>
+  <div class="legend card" id="legend"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<script type="module">
+import { db, base, surveyId, DEFAULT_SURVEY, ready, COLORS, TEXTURES, FAMILIES, familyOf, FIZZ,
+         soilwebUrl, escapeHtml } from "./app.js";
+import { ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+const phoneUrl = new URL("./", location.href);
+if (surveyId !== DEFAULT_SURVEY) phoneUrl.search = `?s=${surveyId}`;
+const qr = qrcode(0, "M"); qr.addData(phoneUrl.href); qr.make();
+document.getElementById("qr").innerHTML = qr.createImgTag(6, 8);
+document.getElementById("qrUrl").textContent = phoneUrl.host + phoneUrl.pathname + phoneUrl.search;
+
+const map = L.map("map").setView([38.62, -121.76], 10);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+  { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(map);
+const layer = L.layerGroup().addTo(map);
+
+const PH_STOPS = [[5, "#d7301f", "≤5 acidic"], [6, "#fc8d59", "6"], [7, "#91cf60", "7 neutral"], [8, "#4575b4", "8"], [99, "#313695", "≥9 alkaline"]];
+const phColor = (v) => (v == null ? null : PH_STOPS.find(([t]) => v <= t + 0.49)[1]);
+const MODES = {
+  family:   { label: "Texture (ours)",   color: (s) => FAMILIES[TEXTURES[s.texture]]?.hex,
+              legend: () => Object.values(FAMILIES).map((f) => [f.hex, f.label]) },
+  dbfamily: { label: "Texture (survey)", color: (s) => FAMILIES[familyOf(s.dbTexture)]?.hex,
+              legend: () => Object.values(FAMILIES).map((f) => [f.hex, f.label]) },
+  color:    { label: "Soil color",       color: (s) => COLORS[s.color]?.hex,
+              legend: () => Object.values(COLORS).map((c) => [c.hex, c.label]) },
+  ph:       { label: "pH (ours)",        color: (s) => phColor(s.ph),
+              legend: () => PH_STOPS.map(([, h, l]) => [h, l]) },
+  dbph:     { label: "pH (survey)",      color: (s) => phColor(s.dbPh),
+              legend: () => PH_STOPS.map(([, h, l]) => [h, l]) },
+  fizz:     { label: "Fizz",             color: (s) => ({ none: "#cfcfcf", slight: "#f2b134", strong: "#d1495b" })[s.fizz],
+              legend: () => [["#cfcfcf", "No fizz"], ["#f2b134", "A little"], ["#d1495b", "Lots"]] },
+};
+let mode = "family", samples = [], fitted = false;
+const tabs = document.getElementById("tabs");
+for (const [k, m] of Object.entries(MODES)) {
+  const b = document.createElement("button"); b.textContent = m.label; b.dataset.k = k;
+  b.onclick = () => { mode = k; draw(); }; tabs.append(b);
+}
+
+function draw() {
+  [...tabs.querySelectorAll("button")].forEach((b) => b.classList.toggle("on", b.dataset.k === mode));
+  const m = MODES[mode];
+  document.getElementById("legend").innerHTML =
+    m.legend().map(([h, l]) => `<span><i style="background:${h}"></i>${escapeHtml(l)}</span>`).join("") +
+    `<span><i style="background:#ffffff"></i>no data</span>`;
+  layer.clearLayers();
+  const pts = [];
+  samples.forEach((s, i) => {
+    if (typeof s.lat !== "number") return;
+    // Rounded points stack up; spread same-cell samples in a small ring so all show.
+    const same = samples.slice(0, i).filter((o) => o.lat === s.lat && o.lng === s.lng).length;
+    const a = same * 2.4, r = same ? 0.0012 * Math.sqrt(same) : 0;
+    const ll = [s.lat + r * Math.sin(a), s.lng + r * Math.cos(a)];
+    pts.push(ll);
+    L.circleMarker(ll, { radius: 11, weight: 2, color: "#222", fillColor: m.color(s) || "#fff", fillOpacity: 0.95 })
+      .bindPopup(`<b>${escapeHtml(s.label)}</b><br>Ours: ${escapeHtml(s.texture)}${s.ph != null ? ", pH " + s.ph : ""}` +
+        `<br>Survey: ${escapeHtml(s.dbTexture || "no data")}${s.dbPh != null ? ", pH " + s.dbPh : ""}` +
+        (s.dbSeries ? `<br>Series: ${escapeHtml(s.dbSeries)} (${escapeHtml(s.dbOrder || "")})` : "") +
+        (s.hyp ? `<br><i>“${escapeHtml(s.hyp)}”</i>` : "") +
+        `<br><a href="${soilwebUrl(s.lat, s.lng)}" target="_blank" rel="noopener">SoilWeb ›</a>`)
+      .addTo(layer);
+  });
+  if (pts.length && !fitted) { map.fitBounds(pts, { padding: [40, 40], maxZoom: 13 }); fitted = true; }
+
+  let both = 0, match = 0, fizzed = 0;
+  const rows = samples.map((s) => {
+    const a = TEXTURES[s.texture], b = familyOf(s.dbTexture);
+    let mark = "";
+    if (a && b) { both++; if (a === b) { match++; mark = '<span class="ok">✓</span>'; } else mark = '<span class="no">✗</span>'; }
+    if (s.fizz && s.fizz !== "none") fizzed++;
+    const sw = COLORS[s.color] ? `<i class="sw" style="background:${COLORS[s.color].hex}"></i>` : "";
+    return `<tr><td>${sw}${escapeHtml(s.label)}</td><td>${escapeHtml(s.texture)}</td>` +
+      `<td>${escapeHtml(s.dbTexture || "—")}${s.dbSeries ? ` <span class="muted">(${escapeHtml(s.dbSeries)})</span>` : ""}</td>` +
+      `<td>${mark}</td><td>${s.ph ?? "—"} / ${s.dbPh ?? "—"}</td></tr>`;
+  });
+  document.getElementById("rows").innerHTML = rows.reverse().join("");
+  document.getElementById("tN").textContent = samples.length;
+  document.getElementById("tMatch").textContent = both ? `${match}/${both}` : "–";
+  document.getElementById("tFizz").textContent = fizzed;
+}
+
+await ready;
+onValue(ref(db, `${base}/samples`), (snap) => {
+  samples = Object.values(snap.val() || {}).sort((a, b) => (a.ts || 0) - (b.ts || 0))
+    .map((s) => ({ ...s, lat: s.lat100 / 100, lng: s.lng100 / 100 }));
+  draw();
+});
+draw();
+</script>
+</body>
+</html>

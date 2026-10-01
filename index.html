@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Soil Map</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="bar">
+  <div>
+    <h1>Soil Map</h1>
+    <div class="sub">EnvironMentors · UC Davis</div>
+  </div>
+</header>
+
+<main id="form">
+  <section class="card">
+    <h2>1 · Name your sample</h2>
+    <input id="label" maxlength="30" placeholder="e.g. Backyard mud, Park dirt #2" autocomplete="off">
+    <p class="muted tiny">A nickname for the sample. <b>No names or addresses.</b></p>
+    <label class="field">Where did it come from?</label>
+    <div id="place" class="chips"></div>
+  </section>
+
+  <section class="card map-card">
+    <h2>2 · Where was it collected?</h2>
+    <div class="zone-line">
+      <span class="muted tiny-r">Tap the map, use GPS, or type it.</span>
+      <button id="gpsBtn" class="small">📍 Use my location</button>
+    </div>
+    <div id="map"></div>
+    <div class="two" style="margin-top:8px">
+      <input id="latIn" inputmode="decimal" placeholder="Latitude 38.68">
+      <input id="lngIn" inputmode="decimal" placeholder="Longitude -121.77">
+    </div>
+    <p class="muted tiny">🔒 Only a rough spot (about 1 km) is shared with the class. Your exact point stays on this phone.</p>
+  </section>
+
+  <section class="card">
+    <h2>3 · Score your soil</h2>
+    <p class="muted tiny">Use the Soil Field Guide sheet.</p>
+    <label class="field">Color</label>
+    <div id="color" class="chips"></div>
+    <label class="field">Texture (from the feel test)</label>
+    <select id="texture">
+      <option value="">Pick from the flowchart…</option>
+    </select>
+    <label class="field">Moisture</label>
+    <div id="moisture" class="chips"></div>
+    <label class="field">Roots</label>
+    <div id="roots" class="chips"></div>
+    <label class="field">Critters (worms, bugs): how many did you see?</label>
+    <input id="critters" type="number" min="0" max="99" value="0" inputmode="numeric">
+    <label class="field">Vinegar fizz test</label>
+    <div id="fizz" class="chips"></div>
+    <label class="field">pH strip (optional)</label>
+    <input id="ph" type="number" min="1" max="14" step="0.5" inputmode="decimal" placeholder="e.g. 7">
+  </section>
+
+  <section class="card">
+    <h2>4 · Hypothesize</h2>
+    <label class="field">How would plants grow in your soil, and why?</label>
+    <textarea id="hyp" maxlength="200" rows="3" placeholder="I think tomatoes would grow… because…"></textarea>
+    <button id="saveBtn" class="primary">Add to the class map</button>
+    <div id="saveMsg" class="muted center"></div>
+  </section>
+</main>
+
+<section id="done" class="card" hidden>
+  <h2>✅ On the map!</h2>
+  <p>Now compare. What did <b>you</b> measure, and what does the <b>USDA soil survey</b> say is at that spot?</p>
+  <table class="cmp"><thead><tr><th></th><th>You</th><th>Soil survey</th></tr></thead><tbody id="cmp"></tbody></table>
+  <p id="dbNote" class="muted tiny"></p>
+  <p><a id="soilweb" target="_blank" rel="noopener">See this area in UC Davis SoilWeb ›</a></p>
+  <button id="againBtn" class="primary">Add another sample</button>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script type="module">
+import { db, base, ready, COLORS, TEXTURES, FAMILIES, familyOf, MOISTURE, ROOTS, FIZZ,
+         lookupSoil, soilwebUrl, escapeHtml } from "./app.js";
+import { ref, push, set, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+const $ = (id) => document.getElementById(id);
+const PLACES = { yard: "Yard / garden", park: "Park", school: "School", farm: "Farm / field", creek: "Creek / river", other: "Other" };
+const pick = {};
+function chips(id, opts, swatch) {
+  const box = $(id);
+  for (const [k, v] of Object.entries(opts)) {
+    const b = document.createElement("button");
+    b.className = "chip"; b.type = "button";
+    b.innerHTML = (swatch ? `<i class="sw" style="background:${v.hex}"></i>` : "") + escapeHtml(v.label ?? v);
+    b.onclick = () => { pick[id] = k; [...box.children].forEach((c) => c.classList.toggle("on", c === b)); };
+    box.append(b);
+  }
+}
+chips("place", PLACES); chips("color", COLORS, true); chips("moisture", MOISTURE);
+chips("roots", ROOTS); chips("fizz", FIZZ);
+for (const t of Object.keys(TEXTURES)) $("texture").add(new Option(t[0].toUpperCase() + t.slice(1), t));
+$("texture").add(new Option("Not sure", "unsure"));
+
+// ---- location: exact point lives only in this variable ----
+let exact = null;
+const map = L.map("map").setView([38.62, -121.76], 10);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+  { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(map);
+let marker = null;
+function setPoint(lat, lng, fromInput) {
+  if (!isFinite(lat) || !isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return;
+  exact = { lat, lng };
+  if (!marker) marker = L.marker([lat, lng]).addTo(map); else marker.setLatLng([lat, lng]);
+  if (!fromInput) { $("latIn").value = lat.toFixed(5); $("lngIn").value = lng.toFixed(5); }
+}
+map.on("click", (e) => setPoint(e.latlng.lat, e.latlng.lng));
+const typed = () => setPoint(parseFloat($("latIn").value), parseFloat($("lngIn").value), true);
+$("latIn").oninput = typed; $("lngIn").oninput = typed;
+$("gpsBtn").onclick = () => {
+  if (!navigator.geolocation) return alert("No GPS on this device. Tap the map instead.");
+  $("gpsBtn").textContent = "📍 Finding you…";
+  navigator.geolocation.getCurrentPosition((p) => {
+    setPoint(p.coords.latitude, p.coords.longitude);
+    map.setView([p.coords.latitude, p.coords.longitude], 15);
+    $("gpsBtn").textContent = "📍 Use my location";
+  }, () => { $("gpsBtn").textContent = "📍 Use my location"; alert("Couldn't get your location. Tap the map instead."); },
+  { enableHighAccuracy: true, timeout: 15000 });
+};
+
+// ---- save ----
+$("saveBtn").onclick = async () => {
+  const msg = $("saveMsg");
+  const label = $("label").value.trim();
+  const texture = $("texture").value;
+  const missing = [];
+  if (!label) missing.push("a nickname");
+  if (!exact) missing.push("a location");
+  if (!pick.color) missing.push("color");
+  if (!texture) missing.push("texture");
+  if (missing.length) { msg.textContent = "Still need: " + missing.join(", "); return; }
+
+  $("saveBtn").disabled = true; msg.textContent = "Checking the soil survey…";
+  let dbv = null;
+  try { dbv = await lookupSoil(exact.lat, exact.lng); } catch (e) { console.warn(e); }
+
+  const rec = {
+    label, lat100: Math.round(exact.lat * 100), lng100: Math.round(exact.lng * 100),
+    color: pick.color, texture, ts: serverTimestamp(),
+    critters: Math.max(0, Math.min(99, parseInt($("critters").value, 10) || 0)),
+  };
+  if (pick.place) rec.place = pick.place;
+  if (pick.moisture) rec.moisture = pick.moisture;
+  if (pick.roots) rec.roots = pick.roots;
+  if (pick.fizz) rec.fizz = pick.fizz;
+  const ph = parseFloat($("ph").value);
+  if (isFinite(ph) && ph >= 1 && ph <= 14) rec.ph = ph;
+  const hyp = $("hyp").value.trim();
+  if (hyp) rec.hyp = hyp.slice(0, 200);
+  if (dbv) for (const [k, v] of Object.entries(dbv)) if (v !== null && v !== "") rec[k] = v;
+
+  msg.textContent = "Saving…";
+  try {
+    await ready;
+    await set(push(ref(db, `${base}/samples`)), rec);
+  } catch (e) {
+    console.error(e); msg.textContent = "Couldn't save. Check your connection and try again.";
+    $("saveBtn").disabled = false; return;
+  }
+  showDone(rec, dbv);
+};
+
+function showDone(rec, dbv) {
+  const fam = (f) => (f ? FAMILIES[f].label : "?");
+  const row = (k, a, b) => `<tr><th>${k}</th><td>${escapeHtml(a ?? "—")}</td><td>${escapeHtml(b ?? "—")}</td></tr>`;
+  const myFam = TEXTURES[rec.texture];
+  $("cmp").innerHTML =
+    row("Texture", rec.texture, dbv?.dbTexture) +
+    row("Family", fam(myFam), fam(familyOf(dbv?.dbTexture))) +
+    row("pH", rec.ph, dbv?.dbPh) +
+    row("Soil series", "", dbv?.dbSeries) +
+    row("Drainage", "", dbv?.dbDrain);
+  $("dbNote").textContent = dbv
+    ? `Survey map unit: ${dbv.dbMap}. Survey values are for the top layer of the main soil in that map unit.`
+    : "No soil survey data for this spot (cities and water are often unmapped).";
+  $("soilweb").href = soilwebUrl(rec.lat100 / 100, rec.lng100 / 100);
+  $("form").hidden = true; $("done").hidden = false; window.scrollTo(0, 0);
+}
+
+$("againBtn").onclick = () => location.reload();
+ready.then((u) => { if (!u) $("saveMsg").textContent = "Couldn't connect. Reload the page."; });
+</script>
+</body>
+</html>
