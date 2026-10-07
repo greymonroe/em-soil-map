@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Soil Map · Live</title>
+<title>Soil Report · Live</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <style>
   :root { --bg:#f6f3ec; --card:#fff; --ink:#1f2a22; --muted:#5d6b61; --line:#dcd6c8; --green:#2f7d4f; }
@@ -12,18 +12,17 @@
   h1 { margin:0 0 4px; font-size:38px; }
   .muted { color:var(--muted); }
   .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:14px; }
-  .left { display:flex; flex-direction:column; gap:12px; min-height:0; }
-  .right { display:flex; flex-direction:column; gap:10px; min-height:0; }
+  .left, .right { display:flex; flex-direction:column; gap:12px; min-height:0; }
   #map { flex:1; min-height:420px; border-radius:16px; }
   .top { display:flex; justify-content:space-between; align-items:center; gap:16px; }
-  #qr img { width:160px; height:160px; background:#fff; border-radius:8px; }
+  #qr img { width:170px; height:170px; background:#fff; border-radius:8px; }
   .qrbox { text-align:center; font-size:13px; }
-  .totals { display:grid; grid-template-columns:repeat(3,1fr); text-align:center; }
-  .totals b { display:block; font-size:42px; }
+  .totals { display:grid; grid-template-columns:repeat(4,1fr); text-align:center; font-size:15px; }
+  .totals b { display:block; font-size:38px; }
   .grow { flex:1; min-height:0; overflow:auto; }
-  table { width:100%; border-collapse:collapse; font-size:17px; }
-  th { text-align:left; color:var(--muted); font-weight:500; font-size:14px; padding:4px 6px; position:sticky; top:0; background:var(--card); }
-  td { padding:6px; border-top:1px solid var(--line); }
+  table { width:100%; border-collapse:collapse; font-size:16px; }
+  th { text-align:left; color:var(--muted); font-weight:500; font-size:13px; padding:4px 6px; position:sticky; top:0; background:var(--card); }
+  td { padding:5px 6px; border-top:1px solid var(--line); }
   .ok { color:var(--green); font-weight:700; }
   .no { color:#b3261e; font-weight:700; }
   .tabs { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
@@ -31,30 +30,33 @@
   .tabs button.on { background:var(--green); color:#fff; border-color:var(--green); }
   .legend { display:flex; flex-wrap:wrap; gap:10px; font-size:15px; }
   .legend i { display:inline-block; width:14px; height:14px; border-radius:50%; margin-right:5px; vertical-align:-2px; border:1px solid rgba(0,0,0,.25); }
-  .sw { display:inline-block; width:12px; height:12px; border-radius:50%; margin-right:4px; border:1px solid rgba(0,0,0,.2); }
+  .sw { display:inline-block; width:12px; height:12px; border-radius:50%; margin-right:4px; border:1px solid rgba(0,0,0,.2); vertical-align:-1px; }
+  .g { display:inline-block; min-width:22px; text-align:center; border-radius:6px; color:#fff; font-weight:700; font-size:14px; padding:0 4px; }
+  .lv { display:inline-block; width:16px; height:16px; border-radius:4px; border:1px solid #0003; vertical-align:-3px; }
 </style>
 </head>
 <body>
 <div class="left">
   <div class="top">
     <div>
-      <h1>Soil Map</h1>
-      <div class="muted">What's under our feet? Our samples vs. the USDA soil survey.</div>
+      <h1>Soil Report</h1>
+      <div class="muted">What's in our soil? Our kits vs. the USDA soil survey.</div>
     </div>
     <div class="qrbox"><div id="qr"></div><div id="qrUrl" class="muted"></div></div>
   </div>
   <div class="card totals">
     <div><b id="tN">0</b>samples</div>
-    <div><b id="tMatch">–</b>texture family matches survey</div>
-    <div><b id="tFizz">0</b>fizzed</div>
+    <div><b id="tPh">–</b>pH range</div>
+    <div><b id="tMatch">–</b>texture matches survey</div>
+    <div><b id="tG">0</b>groups in</div>
   </div>
   <div class="card grow">
-    <table><thead><tr><th>Sample</th><th>We measured</th><th>Survey says</th><th></th><th>pH us / survey</th></tr></thead>
+    <table><thead><tr><th>Grp</th><th>Sample</th><th>Texture (ours / survey)</th><th>pH ours / survey</th><th>N</th><th>P</th><th>K</th></tr></thead>
     <tbody id="rows"></tbody></table>
   </div>
 </div>
 <div class="right">
-  <div class="tabs" id="tabs"><span class="muted">Color points by:</span></div>
+  <div class="tabs" id="tabs"><span class="muted">Color by:</span></div>
   <div id="map"></div>
   <div class="legend card" id="legend"></div>
 </div>
@@ -62,8 +64,8 @@
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script type="module">
-import { db, base, surveyId, DEFAULT_SURVEY, ready, COLORS, TEXTURES, FAMILIES, familyOf, FIZZ,
-         soilwebUrl, escapeHtml } from "./app.js";
+import { db, surveyId, DEFAULT_SURVEY, base, ready, GROUPS, COLORS, TEXTURES, FAMILIES, familyOf, LEVELS,
+         PLACES, PH_CHIPS, phHex, soilwebUrl, escapeHtml } from "./app.js";
 import { ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 const phoneUrl = new URL("./", location.href);
@@ -72,33 +74,37 @@ const qr = qrcode(0, "M"); qr.addData(phoneUrl.href); qr.make();
 document.getElementById("qr").innerHTML = qr.createImgTag(6, 8);
 document.getElementById("qrUrl").textContent = phoneUrl.host + phoneUrl.pathname + phoneUrl.search;
 
-const map = L.map("map").setView([38.62, -121.76], 10);
+const map = L.map("map").setView([38.6, -121.75], 9);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
   { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(map);
 const layer = L.layerGroup().addTo(map);
 
-const PH_STOPS = [[5, "#d7301f", "≤5 acidic"], [6, "#fc8d59", "6"], [7, "#91cf60", "7 neutral"], [8, "#4575b4", "8"], [99, "#313695", "≥9 alkaline"]];
-const phColor = (v) => (v == null ? null : PH_STOPS.find(([t]) => v <= t + 0.49)[1]);
+const PH_LEG = PH_CHIPS.filter(([v]) => v % 1 === 0).map(([v, h]) => [h, `${v}${v === 4 ? " acidic" : v === 7 ? " neutral" : v === 9 ? " alkaline" : ""}`]);
+const levelMode = (k, label) => ({ label, color: (s) => LEVELS[s[k + "L"]]?.hex,
+  legend: () => Object.values(LEVELS).map((l) => [l.hex, l.label]) });
 const MODES = {
+  ph:       { label: "pH (ours)",        color: (s) => phHex(s.phV), legend: () => PH_LEG },
+  dbph:     { label: "pH (survey)",      color: (s) => phHex(s.dbPh), legend: () => PH_LEG },
+  n:        levelMode("n", "Nitrate"),
+  p:        levelMode("p", "Phosphorus"),
+  k:        levelMode("k", "Potassium"),
+  nh3:      levelMode("nh3", "Ammonia"),
   family:   { label: "Texture (ours)",   color: (s) => FAMILIES[TEXTURES[s.texture]]?.hex,
               legend: () => Object.values(FAMILIES).map((f) => [f.hex, f.label]) },
   dbfamily: { label: "Texture (survey)", color: (s) => FAMILIES[familyOf(s.dbTexture)]?.hex,
               legend: () => Object.values(FAMILIES).map((f) => [f.hex, f.label]) },
   color:    { label: "Soil color",       color: (s) => COLORS[s.color]?.hex,
               legend: () => Object.values(COLORS).map((c) => [c.hex, c.label]) },
-  ph:       { label: "pH (ours)",        color: (s) => phColor(s.ph),
-              legend: () => PH_STOPS.map(([, h, l]) => [h, l]) },
-  dbph:     { label: "pH (survey)",      color: (s) => phColor(s.dbPh),
-              legend: () => PH_STOPS.map(([, h, l]) => [h, l]) },
-  fizz:     { label: "Fizz",             color: (s) => ({ none: "#cfcfcf", slight: "#f2b134", strong: "#d1495b" })[s.fizz],
-              legend: () => [["#cfcfcf", "No fizz"], ["#f2b134", "A little"], ["#d1495b", "Lots"]] },
+  group:    { label: "Group",            color: (s) => GROUPS[s.group]?.hex,
+              legend: () => Object.entries(GROUPS).map(([n, g]) => [g.hex, `${n} ${g.name}`]) },
 };
-let mode = "family", samples = [], fitted = false;
+let mode = "ph", samples = [], fittedN = 0;
 const tabs = document.getElementById("tabs");
 for (const [k, m] of Object.entries(MODES)) {
   const b = document.createElement("button"); b.textContent = m.label; b.dataset.k = k;
   b.onclick = () => { mode = k; draw(); }; tabs.append(b);
 }
+const lvBox = (s, k) => s[k + "L"] ? `<span class="lv" title="${LEVELS[s[k + "L"]].label}" style="background:${LEVELS[s[k + "L"]].hex}"></span>` : "—";
 
 function draw() {
   [...tabs.querySelectorAll("button")].forEach((b) => b.classList.toggle("on", b.dataset.k === mode));
@@ -110,42 +116,49 @@ function draw() {
   const pts = [];
   samples.forEach((s, i) => {
     if (typeof s.lat !== "number") return;
-    // Rounded points stack up; spread same-cell samples in a small ring so all show.
-    const same = samples.slice(0, i).filter((o) => o.lat === s.lat && o.lng === s.lng).length;
-    const a = same * 2.4, r = same ? 0.0012 * Math.sqrt(same) : 0;
+    // Samples from the same spot (e.g. the backup bag) stack up; fan them out.
+    const same = samples.slice(0, i).filter((o) => Math.abs(o.lat - s.lat) < 1e-4 && Math.abs(o.lng - s.lng) < 1e-4).length;
+    const a = same * 2.4, r = same ? 0.0004 * Math.sqrt(same) : 0;
     const ll = [s.lat + r * Math.sin(a), s.lng + r * Math.cos(a)];
     pts.push(ll);
-    L.circleMarker(ll, { radius: 11, weight: 2, color: "#222", fillColor: m.color(s) || "#fff", fillOpacity: 0.95 })
-      .bindPopup(`<b>${escapeHtml(s.label)}</b><br>Ours: ${escapeHtml(s.texture)}${s.ph != null ? ", pH " + s.ph : ""}` +
+    const lvl = (k, n) => s[k + "L"] ? `<br>${n}: ${LEVELS[s[k + "L"]].label}${s[k + "V"] != null ? ` (${s[k + "V"]})` : ""}` : "";
+    L.circleMarker(ll, { radius: 11, weight: 3, color: GROUPS[s.group]?.hex || "#222", fillColor: m.color(s) || "#fff", fillOpacity: 0.95 })
+      .bindPopup(`<b>${escapeHtml(s.label)}</b> · Group ${s.group}` +
+        (s.place ? `<br>${escapeHtml(PLACES[s.place] || "")}` : "") +
+        (s.site ? `<br><i>${escapeHtml(s.site)}</i>` : "") +
+        `<br>Ours: ${escapeHtml(s.texture || "?")}${s.phV != null ? ", pH " + s.phV : ""}` +
+        lvl("n", "N") + lvl("p", "P") + lvl("k", "K") + lvl("nh3", "Ammonia") +
         `<br>Survey: ${escapeHtml(s.dbTexture || "no data")}${s.dbPh != null ? ", pH " + s.dbPh : ""}` +
         (s.dbSeries ? `<br>Series: ${escapeHtml(s.dbSeries)} (${escapeHtml(s.dbOrder || "")})` : "") +
-        (s.hyp ? `<br><i>“${escapeHtml(s.hyp)}”</i>` : "") +
+        (s.reflect?.r3 ? `<br>Hypothesis: <i>“${escapeHtml(s.reflect.r3)}”</i>` : "") +
         `<br><a href="${soilwebUrl(s.lat, s.lng)}" target="_blank" rel="noopener">SoilWeb ›</a>`)
       .addTo(layer);
   });
-  if (pts.length && !fitted) { map.fitBounds(pts, { padding: [40, 40], maxZoom: 13 }); fitted = true; }
+  if (pts.length && pts.length !== fittedN) { map.fitBounds(pts, { padding: [40, 40], maxZoom: 14 }); fittedN = pts.length; }
 
-  let both = 0, match = 0, fizzed = 0;
+  let both = 0, match = 0;
   const rows = samples.map((s) => {
     const a = TEXTURES[s.texture], b = familyOf(s.dbTexture);
     let mark = "";
-    if (a && b) { both++; if (a === b) { match++; mark = '<span class="ok">✓</span>'; } else mark = '<span class="no">✗</span>'; }
-    if (s.fizz && s.fizz !== "none") fizzed++;
+    if (a && b) { both++; if (a === b) { match++; mark = ' <span class="ok">✓</span>'; } else mark = ' <span class="no">✗</span>'; }
     const sw = COLORS[s.color] ? `<i class="sw" style="background:${COLORS[s.color].hex}"></i>` : "";
-    return `<tr><td>${sw}${escapeHtml(s.label)}</td><td>${escapeHtml(s.texture)}</td>` +
-      `<td>${escapeHtml(s.dbTexture || "—")}${s.dbSeries ? ` <span class="muted">(${escapeHtml(s.dbSeries)})</span>` : ""}</td>` +
-      `<td>${mark}</td><td>${s.ph ?? "—"} / ${s.dbPh ?? "—"}</td></tr>`;
+    const g = GROUPS[s.group];
+    return `<tr><td><span class="g" style="background:${g?.hex || "#888"}">${s.group}</span></td>` +
+      `<td>${sw}${escapeHtml(s.label)}</td>` +
+      `<td>${escapeHtml(s.texture && s.texture !== "unsure" ? s.texture : "—")} / ${escapeHtml(s.dbTexture || "—")}${mark}</td>` +
+      `<td>${s.phV ?? "—"} / ${s.dbPh ?? "—"}</td><td>${lvBox(s, "n")}</td><td>${lvBox(s, "p")}</td><td>${lvBox(s, "k")}</td></tr>`;
   });
   document.getElementById("rows").innerHTML = rows.reverse().join("");
   document.getElementById("tN").textContent = samples.length;
+  const phs = samples.map((s) => s.phV).filter((v) => v != null);
+  document.getElementById("tPh").textContent = phs.length ? `${Math.min(...phs)}–${Math.max(...phs)}` : "–";
   document.getElementById("tMatch").textContent = both ? `${match}/${both}` : "–";
-  document.getElementById("tFizz").textContent = fizzed;
+  document.getElementById("tG").textContent = new Set(samples.map((s) => s.group)).size;
 }
 
 await ready;
 onValue(ref(db, `${base}/samples`), (snap) => {
-  samples = Object.values(snap.val() || {}).sort((a, b) => (a.ts || 0) - (b.ts || 0))
-    .map((s) => ({ ...s, lat: s.lat100 / 100, lng: s.lng100 / 100 }));
+  samples = Object.values(snap.val() || {}).sort((a, b) => (a.ts || 0) - (b.ts || 0));
   draw();
 });
 draw();

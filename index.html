@@ -3,190 +3,575 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Soil Map</title>
+<title>Soil Report</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header class="bar">
   <div>
-    <h1>Soil Map</h1>
+    <h1>Soil Report</h1>
     <div class="sub">EnvironMentors · UC Davis</div>
   </div>
 </header>
 
+<div id="mine" class="card mine" hidden></div>
+
 <main id="form">
+  <section class="card timer-card">
+    <h2>⏱ Start here: mix and wait</h2>
+    <ol class="steps">
+      <li>Put a spoonful of your soil in a cup and add distilled water (follow your kit's amounts).</li>
+      <li>Stir, then start the timer. Let it settle about 30 minutes.</li>
+      <li>While you wait, fill in steps 1 to 4 below.</li>
+    </ol>
+    <div class="timer-row">
+      <div id="timerTxt" class="timer">30:00</div>
+      <button id="timerBtn" class="small" type="button">Start 30-min timer</button>
+    </div>
+  </section>
+
   <section class="card">
-    <h2>1 · Name your sample</h2>
-    <input id="label" maxlength="30" placeholder="e.g. Backyard mud, Park dirt #2" autocomplete="off">
-    <p class="muted tiny">A nickname for the sample. <b>No names or addresses.</b></p>
-    <label class="field">Where did it come from?</label>
-    <div id="place" class="chips"></div>
+    <h2>1 · You and your sample</h2>
+    <label class="field">Your group</label>
+    <div id="group" class="groups"></div>
+    <label class="field">Sample nickname</label>
+    <input id="label" maxlength="30" placeholder="e.g. Grandma's garden, Creek mud" autocomplete="off">
   </section>
 
   <section class="card map-card">
-    <h2>2 · Where was it collected?</h2>
+    <h2>2 · Where did it come from?</h2>
+    <label class="field">Latitude, longitude <b class="req">required</b></label>
+    <input id="coords" inputmode="text" placeholder="38.53920, -121.75060" autocomplete="off">
+    <div id="coordMsg" class="tiny-msg"></div>
+    <details class="help">
+      <summary>How to get it from Google Maps</summary>
+      <ol>
+        <li>Open <b>Google Maps</b> and find the spot where you dug the soil.</li>
+        <li><b>Press and hold</b> on that exact spot until a red pin drops.</li>
+        <li>The numbers show up in the search box at the top (like <code>38.53920, -121.75060</code>).</li>
+        <li>Tap them to copy, come back here, and paste into the box above.</li>
+      </ol>
+      <p class="muted tiny">The second number is negative in California. Keep the minus sign.</p>
+    </details>
     <div class="zone-line">
-      <span class="muted tiny-r">Tap the map, use GPS, or type it.</span>
-      <button id="gpsBtn" class="small">📍 Use my location</button>
+      <span class="muted tiny-r">Or tap the map, or:</span>
+      <button id="gpsBtn" class="small" type="button">📍 I'm at the spot now</button>
     </div>
     <div id="map"></div>
-    <div class="two" style="margin-top:8px">
-      <input id="latIn" inputmode="decimal" placeholder="Latitude 38.68">
-      <input id="lngIn" inputmode="decimal" placeholder="Longitude -121.77">
-    </div>
-    <p class="muted tiny">🔒 Only a rough spot (about 1 km) is shared with the class. Your exact point stays on this phone.</p>
+
+    <label class="field">What kind of place?</label>
+    <div id="place" class="chips"></div>
+    <label class="field">Describe the site</label>
+    <textarea id="site" maxlength="300" rows="3" placeholder="e.g. Vegetable bed behind our house, next to the fence. Watered every few days."></textarea>
   </section>
 
   <section class="card">
-    <h2>3 · Score your soil</h2>
-    <p class="muted tiny">Use the Soil Field Guide sheet.</p>
-    <label class="field">Color</label>
-    <div id="color" class="chips"></div>
-    <label class="field">Texture (from the feel test)</label>
-    <select id="texture">
-      <option value="">Pick from the flowchart…</option>
-    </select>
+    <h2>3 · Photo of your soil</h2>
+    <label class="photo-btn"><input type="file" accept="image/*" data-photo="soil" hidden>📷 Take or choose a photo</label>
+    <img class="preview" data-preview="soil" hidden alt="Soil photo">
+  </section>
+
+  <section class="card">
+    <h2>4 · Look, feel, smell</h2>
+
+    <label class="field">Color: hold your soil next to the screen. Which is closest?</label>
+    <div id="color" class="swatches"></div>
+
+    <label class="field">Texture by feel</label>
+    <p class="muted tiny">Wet a bit of soil until it's like putty, then work through the questions.</p>
+    <div class="q">
+      <div class="qtitle">A. Squeeze it in your fist. Does it stay in a ball?</div>
+      <div id="ball" class="cards2"></div>
+    </div>
+    <div class="q" id="qRibbon" hidden>
+      <div class="qtitle">B. Push it out between thumb and finger. How long a ribbon before it breaks?</div>
+      <div id="ribbon" class="cards4"></div>
+    </div>
+    <div class="q" id="qGrit" hidden>
+      <div class="qtitle">C. Wet a pinch in your palm and rub. How does it feel?</div>
+      <div id="grit" class="cards3"></div>
+    </div>
+    <div id="texResult" class="result" hidden></div>
+    <button id="texUnsure" class="linklike" type="button">Not sure, skip texture</button>
+
+    <label class="field">Structure: break a clump gently. What shape are the pieces?</label>
+    <div id="structure" class="cards5"></div>
+
     <label class="field">Moisture</label>
     <div id="moisture" class="chips"></div>
     <label class="field">Roots</label>
     <div id="roots" class="chips"></div>
-    <label class="field">Critters (worms, bugs): how many did you see?</label>
-    <input id="critters" type="number" min="0" max="99" value="0" inputmode="numeric">
-    <label class="field">Vinegar fizz test</label>
-    <div id="fizz" class="chips"></div>
-    <label class="field">pH strip (optional)</label>
-    <input id="ph" type="number" min="1" max="14" step="0.5" inputmode="decimal" placeholder="e.g. 7">
+    <label class="field">Dead leaves, twigs, bits of plants</label>
+    <div id="organic" class="chips"></div>
+    <label class="field">Rocks and gravel</label>
+    <div id="rocks" class="chips"></div>
+    <label class="field">Smell</label>
+    <div id="smell" class="chips"></div>
+    <label class="field">Critters: how many did you see?</label>
+    <input id="critters" type="number" min="0" max="999" inputmode="numeric" placeholder="0">
+    <div id="critterKinds" class="chips"></div>
   </section>
 
   <section class="card">
-    <h2>4 · Hypothesize</h2>
-    <label class="field">How would plants grow in your soil, and why?</label>
-    <textarea id="hyp" maxlength="200" rows="3" placeholder="I think tomatoes would grow… because…"></textarea>
-    <button id="saveBtn" class="primary">Add to the class map</button>
+    <h2>5 · Chemistry (after it settles)</h2>
+    <p class="muted tiny">Do the tests your group's kits have. For each one: pick the kit type, match the color to the chart, enter the number if the chart shows one, and snap a photo of the result next to the chart. Skip any test you didn't do.</p>
+    <div id="tests"></div>
+  </section>
+
+  <section class="card">
+    <button id="saveBtn" class="primary" type="button">Save and see my soil report</button>
     <div id="saveMsg" class="muted center"></div>
   </section>
 </main>
 
-<section id="done" class="card" hidden>
-  <h2>✅ On the map!</h2>
-  <p>Now compare. What did <b>you</b> measure, and what does the <b>USDA soil survey</b> say is at that spot?</p>
-  <table class="cmp"><thead><tr><th></th><th>You</th><th>Soil survey</th></tr></thead><tbody id="cmp"></tbody></table>
-  <p id="dbNote" class="muted tiny"></p>
-  <p><a id="soilweb" target="_blank" rel="noopener">See this area in UC Davis SoilWeb ›</a></p>
-  <button id="againBtn" class="primary">Add another sample</button>
+<section id="report" hidden>
+  <div class="card">
+    <div class="rc-head">
+      <div>
+        <div class="muted tiny-r" id="rcGroup"></div>
+        <h2 id="rcTitle" style="margin:2px 0 0"></h2>
+        <div class="muted tiny-r" id="rcWhere"></div>
+      </div>
+      <img id="rcPhoto" class="rc-photo" hidden alt="">
+    </div>
+    <table class="cmp"><tbody id="rcTable"></tbody></table>
+  </div>
+
+  <div class="card">
+    <h2>What it means</h2>
+    <div id="rcMeaning"></div>
+    <p class="muted tiny" style="margin-top:8px">Home kits give rough readings. Use them to compare soils with each other, not as exact numbers.</p>
+  </div>
+
+  <div class="card">
+    <h2>You vs. the USDA soil survey</h2>
+    <p class="muted tiny" style="margin:0 0 6px">What the government soil map says is at your spot.</p>
+    <table class="cmp"><thead><tr><th></th><th>You</th><th>Soil survey</th></tr></thead><tbody id="cmp"></tbody></table>
+    <p id="dbNote" class="muted tiny"></p>
+    <p><a id="soilweb" target="_blank" rel="noopener">See this spot in UC Davis SoilWeb ›</a></p>
+  </div>
+
+  <div class="card">
+    <h2>Think about it</h2>
+    <label class="field">What about the environment where you got this soil made these results?</label>
+    <textarea id="r1" maxlength="600" rows="3"></textarea>
+    <label class="field">How would your results be different if the soil came from somewhere else? Where, and why?</label>
+    <textarea id="r2" maxlength="600" rows="3"></textarea>
+    <label class="field">Hypothesis: name a place where you'd expect a different result, and predict what it would be.</label>
+    <textarea id="r3" maxlength="600" rows="3" placeholder="I think soil from ___ would have ___ because ___."></textarea>
+    <label class="field">Was it easy or hard to measure? Why?</label>
+    <textarea id="r4" maxlength="600" rows="3"></textarea>
+    <button id="reflectBtn" class="primary" type="button">Save my answers</button>
+    <div id="reflectMsg" class="muted center"></div>
+  </div>
+
+  <button id="againBtn" class="secondary" type="button">Enter another sample</button>
 </section>
 
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="module">
-import { db, base, ready, COLORS, TEXTURES, FAMILIES, familyOf, MOISTURE, ROOTS, FIZZ,
-         lookupSoil, soilwebUrl, escapeHtml } from "./app.js";
+import { db, auth, base, surveyId, ready, GROUPS, PLACES, COLORS, TEXTURES, FAMILIES, familyOf, textureFrom,
+         STRUCTURES, MOISTURE, ROOTS, ORGANIC, ROCKS, SMELLS, CRITTERS, LEVELS, KITS, TESTS, PH_CHIPS,
+         interpret, lookupSoil, soilwebUrl, escapeHtml } from "./app.js";
 import { ref, push, set, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 const $ = (id) => document.getElementById(id);
-const PLACES = { yard: "Yard / garden", park: "Park", school: "School", farm: "Farm / field", creek: "Creek / river", other: "Other" };
-const pick = {};
-function chips(id, opts, swatch) {
+const store = {
+  get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } },
+  del(k) { try { localStorage.removeItem(k); } catch {} },
+};
+const DRAFT = `soil-draft-${surveyId}`, MINE = `soil-mine-${surveyId}`, TIMER = `soil-timer-${surveyId}`;
+
+// S = everything typed/picked; photos kept apart (big).
+let S = {}, photos = {};
+const draft = store.get(DRAFT);
+if (draft) { S = draft.S || {}; photos = draft.photos || {}; }
+function saveDraft() {
+  if (!store.set(DRAFT, { S, photos })) store.set(DRAFT, { S, photos: {} }); // photos too big: keep the rest
+}
+
+// ---- illustrations ---------------------------------------------------------
+const soil = "#7a5a3c", soilD = "#55402e";
+const SVG = (w, h, body) => `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" aria-hidden="true">${body}</svg>`;
+const ART = {
+  ball_yes: SVG(80, 50, `<circle cx="40" cy="26" r="18" fill="${soil}"/><path d="M28 18 q6 -6 14 -4" stroke="#fff6" stroke-width="3" fill="none"/>`),
+  ball_no: SVG(80, 50, [[22,34,6],[36,38,5],[48,32,7],[60,38,4],[30,26,4],[54,24,3],[42,24,4]]
+    .map(([x,y,r]) => `<circle cx="${x}" cy="${y}" r="${r}" fill="${soil}"/>`).join("")),
+  ribbon: (len) => SVG(90, 50, `<line x1="6" y1="40" x2="84" y2="40" stroke="#999" stroke-width="1"/>
+      ${[6,32,58,84].map((x) => `<line x1="${x}" y1="36" x2="${x}" y2="44" stroke="#999"/>`).join("")}
+      <ellipse cx="10" cy="22" rx="8" ry="10" fill="#e8c9a8" stroke="#b8957a"/>
+      ${len ? `<rect x="14" y="18" width="${len}" height="7" rx="3" fill="${soil}"/>` : `<circle cx="20" cy="27" r="3" fill="${soil}"/><circle cx="26" cy="30" r="2" fill="${soil}"/>`}`),
+  gritty: SVG(80, 50, Array.from({ length: 22 }, (_, i) => `<circle cx="${10 + (i * 29) % 62}" cy="${10 + (i * 17) % 32}" r="${2 + (i % 3)}" fill="${soilD}"/>`).join("")),
+  smooth: SVG(80, 50, `<path d="M8 30 C 22 14, 34 40, 48 24 S 70 20, 74 26" stroke="${soil}" stroke-width="8" fill="none" stroke-linecap="round"/>`),
+  neither: SVG(80, 50, `<path d="M8 32 C 22 18, 34 40, 48 26 S 70 22, 74 28" stroke="${soil}" stroke-width="7" fill="none" stroke-linecap="round"/>` +
+    [[18,18],[40,14],[60,38],[30,40]].map(([x,y]) => `<circle cx="${x}" cy="${y}" r="3" fill="${soilD}"/>`).join("")),
+  granular: SVG(60, 44, Array.from({ length: 16 }, (_, i) => `<circle cx="${10 + (i % 4) * 13 + (i % 2) * 3}" cy="${8 + Math.floor(i / 4) * 10}" r="5" fill="${soil}"/>`).join("")),
+  blocky: SVG(60, 44, [[4,4,24,16],[31,3,24,18],[5,23,20,17],[28,24,27,16]].map(([x,y,w,h]) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="2" fill="${soil}"/>`).join("")),
+  platy: SVG(60, 44, [4,13,22,31].map((y, i) => `<rect x="${4 + i % 2 * 4}" y="${y}" width="${48 - i % 2 * 4}" height="6" rx="2" fill="${soil}"/>`).join("")),
+  single: SVG(60, 44, Array.from({ length: 26 }, (_, i) => `<circle cx="${6 + (i * 23) % 50}" cy="${6 + (i * 13) % 34}" r="2" fill="#c9a66b"/>`).join("")),
+  massive: SVG(60, 44, `<rect x="6" y="5" width="48" height="34" rx="6" fill="${soil}"/>`),
+};
+
+// ---- generic pickers -------------------------------------------------------
+const pickers = {};   // field -> refresh()
+function picker(id, opts, render, { multi = false, onPick } = {}) {
   const box = $(id);
-  for (const [k, v] of Object.entries(opts)) {
+  const btns = Object.entries(opts).map(([k, v]) => {
     const b = document.createElement("button");
-    b.className = "chip"; b.type = "button";
-    b.innerHTML = (swatch ? `<i class="sw" style="background:${v.hex}"></i>` : "") + escapeHtml(v.label ?? v);
-    b.onclick = () => { pick[id] = k; [...box.children].forEach((c) => c.classList.toggle("on", c === b)); };
-    box.append(b);
+    b.type = "button"; b.dataset.k = k;
+    render(b, k, v);
+    b.onclick = () => {
+      if (multi) {
+        const cur = new Set(S[id] || []);
+        cur.has(k) ? cur.delete(k) : cur.add(k);
+        S[id] = [...cur];
+      } else S[id] = S[id] === k ? undefined : k;
+      refresh(); onPick?.(); saveDraft();
+    };
+    box.append(b); return b;
+  });
+  const refresh = () => btns.forEach((b) => b.classList.toggle("on",
+    multi ? (S[id] || []).includes(b.dataset.k) : S[id] === b.dataset.k));
+  pickers[id] = refresh; refresh();
+}
+const chip = (b, k, v) => { b.className = "chip"; b.textContent = v.label ?? v; };
+const artCard = (b, k, v) => { b.className = "acard"; b.innerHTML = `${v.art}<b>${escapeHtml(v.label)}</b>${v.desc ? `<span>${escapeHtml(v.desc)}</span>` : ""}`; };
+
+picker("group", GROUPS, (b, k, g) => { b.className = "gbtn"; b.style.setProperty("--g", g.hex); b.innerHTML = `<b>${k}</b><span>${g.name}</span>`; });
+picker("place", PLACES, chip);
+picker("color", COLORS, (b, k, c) => { b.className = "swatch"; b.innerHTML = `<i style="background:${c.hex}"></i><span>${escapeHtml(c.label)}</span>`; });
+picker("ball", { yes: { label: "Yes, it holds", art: ART.ball_yes }, no: { label: "No, it falls apart", art: ART.ball_no } }, artCard, { onPick: texture });
+picker("ribbon", {
+  none:   { label: "No ribbon", art: ART.ribbon(0) },
+  short:  { label: "Short", desc: "under 2.5 cm (1 in)", art: ART.ribbon(16) },
+  medium: { label: "Medium", desc: "2.5 to 5 cm", art: ART.ribbon(42) },
+  long:   { label: "Long", desc: "over 5 cm (2 in)", art: ART.ribbon(70) },
+}, artCard, { onPick: texture });
+picker("grit", {
+  gritty:  { label: "Gritty", desc: "like sandpaper", art: ART.gritty },
+  smooth:  { label: "Smooth", desc: "like flour or silk", art: ART.smooth },
+  neither: { label: "Neither", desc: "a bit of both", art: ART.neither },
+}, artCard, { onPick: texture });
+picker("structure", Object.fromEntries(Object.entries(STRUCTURES).map(([k, v]) => [k, { ...v, art: ART[k] }])), artCard);
+picker("moisture", MOISTURE, chip); picker("roots", ROOTS, chip); picker("organic", ORGANIC, chip);
+picker("rocks", ROCKS, chip); picker("smell", SMELLS, chip);
+picker("critterKinds", CRITTERS, chip, { multi: true });
+
+function texture() {
+  const t = textureFrom(S.ball, S.ribbon, S.grit);
+  $("qRibbon").hidden = S.ball !== "yes";
+  $("qGrit").hidden = S.ball !== "yes" || !S.ribbon || S.ribbon === "none";
+  if (S.ball === "no") { S.ribbon = S.grit = undefined; }
+  if (S.ribbon === "none") S.grit = undefined;
+  pickers.ribbon?.(); pickers.grit?.();
+  if (t) S.texture = t; else if (S.texture !== "unsure") S.texture = undefined;
+  const r = $("texResult");
+  r.hidden = !S.texture;
+  if (S.texture === "unsure") r.innerHTML = "Texture: <b>not sure</b>";
+  else if (S.texture) r.innerHTML = `Your soil is <b>${escapeHtml(S.texture)}</b> <span class="fam" style="background:${FAMILIES[TEXTURES[S.texture]].hex}">${FAMILIES[TEXTURES[S.texture]].label}</span>`;
+}
+$("texUnsure").onclick = () => { S.ball = S.ribbon = S.grit = undefined; S.texture = "unsure"; pickers.ball(); texture(); saveDraft(); };
+
+// ---- text inputs -----------------------------------------------------------
+for (const id of ["label", "site", "critters"]) {
+  if (S[id] != null) $(id).value = S[id];
+  $(id).addEventListener("input", () => { S[id] = $(id).value; saveDraft(); });
+}
+
+// ---- chemistry -------------------------------------------------------------
+for (const [k, t] of Object.entries(TESTS)) {
+  const div = document.createElement("div");
+  div.className = "test";
+  div.innerHTML = `<h3>${t.label}</h3>
+    <label class="field">Kit type</label><div id="${k}Kit" class="chips"></div>
+    ${k === "ph"
+      ? `<label class="field">Closest color on the chart</label><div id="phV" class="phchips"></div>
+         <input id="phIn" type="number" min="0" max="14" step="0.1" inputmode="decimal" placeholder="or type the pH, e.g. 6.8">`
+      : `<label class="field">Level from the chart</label><div id="${k}L" class="levels"></div>
+         <input id="${k}V" type="number" min="0" max="2000" step="any" inputmode="decimal" placeholder="Number under that color, if the chart has one">`}
+    <label class="photo-btn small-photo"><input type="file" accept="image/*" data-photo="${k}" hidden>📷 Photo of the result + chart</label>
+    <img class="preview" data-preview="${k}" hidden alt="">`;
+  $("tests").append(div);
+  picker(`${k}Kit`, KITS, chip);
+  if (k === "ph") {
+    const box = $("phV");
+    for (const [v, hex] of PH_CHIPS) {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "phchip"; b.style.background = hex; b.textContent = v;
+      b.onclick = () => { S.phV = S.phV === v ? undefined : v; $("phIn").value = ""; phRefresh(); saveDraft(); };
+      box.append(b);
+    }
+    const phRefresh = () => [...box.children].forEach((b) => b.classList.toggle("on", +b.textContent === S.phV));
+    $("phIn").oninput = () => { const v = parseFloat($("phIn").value); S.phV = isFinite(v) && v >= 0 && v <= 14 ? v : undefined; phRefresh(); saveDraft(); };
+    if (S.phV != null && !PH_CHIPS.some(([v]) => v === S.phV)) $("phIn").value = S.phV;
+    phRefresh();
+  } else {
+    picker(`${k}L`, LEVELS, (b, kk, l) => { b.className = "level"; b.innerHTML = `<i style="background:${l.hex}"></i>${l.label}`; });
+    const inp = $(`${k}V`);
+    if (S[`${k}V`] != null) inp.value = S[`${k}V`];
+    inp.oninput = () => { S[`${k}V`] = inp.value; saveDraft(); };
   }
 }
-chips("place", PLACES); chips("color", COLORS, true); chips("moisture", MOISTURE);
-chips("roots", ROOTS); chips("fizz", FIZZ);
-for (const t of Object.keys(TEXTURES).filter((t) => t !== "silt")) $("texture").add(new Option(t[0].toUpperCase() + t.slice(1), t));
-$("texture").add(new Option("Not sure", "unsure"));
 
-// ---- location: exact point lives only in this variable ----
-let exact = null;
-const map = L.map("map").setView([38.62, -121.76], 10);
+// ---- photos (shrunk on the phone before upload, same as Campus Census) ------
+function shrink(file, max, q) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const s = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement("canvas");
+      c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      let out = c.toDataURL("image/jpeg", q);
+      if (out.length > 380000) out = c.toDataURL("image/jpeg", 0.4);
+      if (out.length > 380000) out = c.toDataURL("image/jpeg", 0.25);
+      URL.revokeObjectURL(img.src); resolve(out);
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+const showPhoto = (slot) => {
+  const im = document.querySelector(`[data-preview="${slot}"]`);
+  if (photos[slot]) { im.src = photos[slot]; im.hidden = false; } else im.hidden = true;
+};
+document.querySelectorAll("[data-photo]").forEach((inp) => {
+  const slot = inp.dataset.photo;
+  showPhoto(slot);
+  inp.onchange = async () => {
+    const f = inp.files[0];
+    if (!f) return;
+    try { photos[slot] = await shrink(f, 900, 0.6); } catch { alert("Couldn't read that photo. Try again."); return; }
+    showPhoto(slot); saveDraft();
+  };
+});
+
+// ---- location --------------------------------------------------------------
+const map = L.map("map").setView([38.6, -121.75], 9);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
   { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(map);
 let marker = null;
-function setPoint(lat, lng, fromInput) {
-  if (!isFinite(lat) || !isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return;
-  exact = { lat, lng };
-  if (!marker) marker = L.marker([lat, lng]).addTo(map); else marker.setLatLng([lat, lng]);
-  if (!fromInput) { $("latIn").value = lat.toFixed(5); $("lngIn").value = lng.toFixed(5); }
+function parseCoords(txt) {
+  txt = txt.trim();
+  // Degrees-minutes-seconds: 38°32'21.1"N 121°45'02.2"W
+  const dms = [...txt.matchAll(/(\d+(?:\.\d+)?)\s*°\s*(?:(\d+(?:\.\d+)?)\s*['′]\s*)?(?:(\d+(?:\.\d+)?)\s*["″]\s*)?([NSEW])/gi)];
+  if (dms.length === 2) {
+    const v = dms.map(([, d, m, s, h]) => (+d + (+m || 0) / 60 + (+s || 0) / 3600) * (/[SW]/i.test(h) ? -1 : 1));
+    const lat = /[NS]/i.test(dms[0][4]) ? v[0] : v[1], lng = /[NS]/i.test(dms[0][4]) ? v[1] : v[0];
+    return { lat, lng };
+  }
+  const nums = txt.match(/-?\d+(?:\.\d+)?/g);
+  if (!nums || nums.length !== 2) return null;
+  return { lat: +nums[0], lng: +nums[1] };
 }
-map.on("click", (e) => setPoint(e.latlng.lat, e.latlng.lng));
-const typed = () => setPoint(parseFloat($("latIn").value), parseFloat($("lngIn").value), true);
-$("latIn").oninput = typed; $("lngIn").oninput = typed;
+function setPoint(lat, lng, src, { pan = true, write = true } = {}) {
+  const msg = $("coordMsg");
+  if (!isFinite(lat) || !isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+    msg.textContent = "That doesn't look like latitude, longitude. Example: 38.53920, -121.75060"; msg.className = "tiny-msg bad";
+    S.lat = S.lng = undefined; saveDraft(); return;
+  }
+  let note = "";
+  // Most common slip: dropping the minus on longitude (puts the point in China).
+  if (lat > 32 && lat < 42.5 && lng > 114 && lng < 125) { lng = -lng; note = " (added the minus sign on the second number)"; write = true; }
+  S.lat = +lat.toFixed(6); S.lng = +lng.toFixed(6); S.locSource = src;
+  if (write) $("coords").value = `${S.lat.toFixed(5)}, ${S.lng.toFixed(5)}`;
+  if (!marker) marker = L.marker([S.lat, S.lng]).addTo(map); else marker.setLatLng([S.lat, S.lng]);
+  if (pan) map.setView([S.lat, S.lng], Math.max(map.getZoom(), 15));
+  const ca = S.lat > 32 && S.lat < 42.5 && S.lng > -125 && S.lng < -114;
+  msg.textContent = (ca ? "✓ Got it" : "⚠️ That's outside California. Double-check the numbers.") + note;
+  msg.className = "tiny-msg " + (ca ? "ok" : "bad");
+  saveDraft();
+}
+$("coords").addEventListener("input", () => {
+  const p = parseCoords($("coords").value);
+  if (p) setPoint(p.lat, p.lng, "typed", { write: false });
+  else if ($("coords").value.trim()) { $("coordMsg").textContent = "Paste both numbers, like 38.53920, -121.75060"; $("coordMsg").className = "tiny-msg"; S.lat = S.lng = undefined; saveDraft(); }
+});
+$("coords").addEventListener("change", () => { if (S.lat != null) $("coords").value = `${S.lat.toFixed(5)}, ${S.lng.toFixed(5)}`; });
+map.on("click", (e) => setPoint(e.latlng.lat, e.latlng.lng, "map", { pan: false }));
 $("gpsBtn").onclick = () => {
-  if (!navigator.geolocation) return alert("No GPS on this device. Tap the map instead.");
+  if (!navigator.geolocation) return alert("No GPS on this device. Use Google Maps or tap the map.");
   $("gpsBtn").textContent = "📍 Finding you…";
   navigator.geolocation.getCurrentPosition((p) => {
-    setPoint(p.coords.latitude, p.coords.longitude);
-    map.setView([p.coords.latitude, p.coords.longitude], 15);
-    $("gpsBtn").textContent = "📍 Use my location";
-  }, () => { $("gpsBtn").textContent = "📍 Use my location"; alert("Couldn't get your location. Tap the map instead."); },
+    setPoint(p.coords.latitude, p.coords.longitude, "gps");
+    $("gpsBtn").textContent = "📍 I'm at the spot now";
+  }, () => { $("gpsBtn").textContent = "📍 I'm at the spot now"; alert("Couldn't get your location. Use Google Maps or tap the map."); },
   { enableHighAccuracy: true, timeout: 15000 });
 };
+if (S.lat != null) setPoint(S.lat, S.lng, S.locSource || "typed");
 
-// ---- save ----
+texture();
+
+// ---- settle timer ----------------------------------------------------------
+const SETTLE = 30 * 60 * 1000;
+let tStart = store.get(TIMER), buzzed = false;
+function tick() {
+  const el = $("timerTxt");
+  if (!tStart) { el.textContent = "30:00"; $("timerBtn").textContent = "Start 30-min timer"; return; }
+  const left = tStart + SETTLE - Date.now();
+  $("timerBtn").textContent = "Restart";
+  if (left <= 0) {
+    el.textContent = "Ready! Do the tests ↓"; el.classList.add("done");
+    if (!buzzed) { buzzed = true; try { navigator.vibrate?.([300, 150, 300]); } catch {} }
+    return;
+  }
+  el.classList.remove("done");
+  const m = Math.floor(left / 60000), s = Math.floor((left % 60000) / 1000);
+  el.textContent = `${m}:${String(s).padStart(2, "0")}`;
+}
+$("timerBtn").onclick = () => {
+  if (tStart && !confirm("Restart the timer from 30:00?")) return;
+  tStart = Date.now(); buzzed = false; store.set(TIMER, tStart); tick();
+};
+setInterval(tick, 1000); tick();
+
+// ---- save ------------------------------------------------------------------
+const num = (v) => { const x = parseFloat(v); return isFinite(x) ? x : null; };
 $("saveBtn").onclick = async () => {
   const msg = $("saveMsg");
-  const label = $("label").value.trim();
-  const texture = $("texture").value;
+  S.label = $("label").value.trim();
   const missing = [];
-  if (!label) missing.push("a nickname");
-  if (!exact) missing.push("a location");
-  if (!pick.color) missing.push("color");
-  if (!texture) missing.push("texture");
+  if (!S.group) missing.push("your group");
+  if (!S.label) missing.push("a nickname");
+  if (S.lat == null) missing.push("latitude, longitude");
   if (missing.length) { msg.textContent = "Still need: " + missing.join(", "); return; }
+  const anyChem = S.phV != null || ["n", "p", "k", "nh3"].some((k) => S[k + "L"]);
+  if (!anyChem && !confirm("No chemistry results yet. Save without them?")) return;
 
-  $("saveBtn").disabled = true; msg.textContent = "Checking the soil survey…";
+  $("saveBtn").disabled = true; msg.textContent = "Checking the USDA soil survey…";
   let dbv = null;
-  try { dbv = await lookupSoil(exact.lat, exact.lng); } catch (e) { console.warn(e); }
+  try { dbv = await lookupSoil(S.lat, S.lng); } catch (e) { console.warn(e); }
 
-  const rec = {
-    label, lat100: Math.round(exact.lat * 100), lng100: Math.round(exact.lng * 100),
-    color: pick.color, texture, ts: serverTimestamp(),
-    critters: Math.max(0, Math.min(99, parseInt($("critters").value, 10) || 0)),
-  };
-  if (pick.place) rec.place = pick.place;
-  if (pick.moisture) rec.moisture = pick.moisture;
-  if (pick.roots) rec.roots = pick.roots;
-  if (pick.fizz) rec.fizz = pick.fizz;
-  const ph = parseFloat($("ph").value);
-  if (isFinite(ph) && ph >= 1 && ph <= 14) rec.ph = ph;
-  const hyp = $("hyp").value.trim();
-  if (hyp) rec.hyp = hyp.slice(0, 200);
+  const user = await ready;
+  if (!user) { msg.textContent = "Couldn't connect. Reload the page (your answers are kept)."; $("saveBtn").disabled = false; return; }
+  const rec = { uid: user.uid, group: +S.group, label: S.label.slice(0, 30), lat: S.lat, lng: S.lng,
+                locSource: S.locSource || "typed", ts: serverTimestamp() };
+  for (const k of ["place", "color", "ball", "ribbon", "grit", "texture", "structure", "moisture", "roots", "organic", "rocks", "smell"])
+    if (S[k]) rec[k] = S[k];
+  const site = (S.site || "").trim(); if (site) rec.site = site.slice(0, 300);
+  const cr = num(S.critters); if (cr != null) rec.critters = Math.max(0, Math.min(999, Math.round(cr)));
+  if (S.critterKinds?.length) rec.critterKinds = S.critterKinds.join(",");
+  if (S.phV != null) rec.phV = S.phV;
+  for (const k of Object.keys(TESTS)) {
+    if (S[k + "Kit"]) rec[k + "Kit"] = S[k + "Kit"];
+    if (k === "ph") continue;
+    if (S[k + "L"]) rec[k + "L"] = S[k + "L"];
+    const v = num(S[k + "V"]); if (v != null && v >= 0 && v <= 2000) rec[k + "V"] = v;
+  }
+  const slots = Object.keys(photos).filter((k) => photos[k]);
+  if (slots.length) rec.photos = slots.join(",");
   if (dbv) for (const [k, v] of Object.entries(dbv)) if (v !== null && v !== "") rec[k] = v;
 
   msg.textContent = "Saving…";
+  let key;
   try {
-    await ready;
-    await set(push(ref(db, `${base}/samples`)), rec);
+    const r = push(ref(db, `${base}/samples`)); key = r.key;
+    await set(r, rec);
   } catch (e) {
-    console.error(e); msg.textContent = "Couldn't save. Check your connection and try again.";
+    console.error(e); msg.textContent = "Couldn't save. Check your connection and try again (your answers are kept).";
     $("saveBtn").disabled = false; return;
   }
-  showDone(rec, dbv);
+  let failed = 0;
+  for (const [i, slot] of slots.entries()) {
+    msg.textContent = `Uploading photos ${i + 1} of ${slots.length}…`;
+    try { await set(ref(db, `${base}/photos/${key}/${slot}`), { data: photos[slot] }); }
+    catch (e) { console.error(e); failed++; }
+  }
+  const local = { ...rec, ts: Date.now() };
+  const mine = store.get(MINE) || [];
+  mine.push({ id: key, rec: local, dbv, soilPhoto: photos.soil || null });
+  if (!store.set(MINE, mine)) { mine.at(-1).soilPhoto = null; store.set(MINE, mine); }
+  const shown = { ...photos };
+  S = {}; photos = {}; store.del(DRAFT);
+  showReport(key, local, dbv, shown);
+  if (failed) alert(`${failed} photo(s) didn't upload, but your results are saved.`);
 };
 
-function showDone(rec, dbv) {
-  const fam = (f) => (f ? FAMILIES[f].label : "?");
+// ---- report card -----------------------------------------------------------
+let current = null;
+function showReport(id, rec, dbv, pics = {}) {
+  current = { id, rec };
+  const g = GROUPS[rec.group];
+  $("rcGroup").innerHTML = `<span class="gdot" style="background:${g?.hex}"></span>Group ${rec.group}${g ? " · " + g.name : ""}`;
+  $("rcTitle").textContent = rec.label;
+  $("rcWhere").textContent = [PLACES[rec.place], `${rec.lat.toFixed(5)}, ${rec.lng.toFixed(5)}`].filter(Boolean).join(" · ");
+  if (pics.soil) { $("rcPhoto").src = pics.soil; $("rcPhoto").hidden = false; } else $("rcPhoto").hidden = true;
+
+  const lvl = (k) => rec[k + "L"] ? `${LEVELS[rec[k + "L"]].label}${rec[k + "V"] != null ? ` (${rec[k + "V"]})` : ""}` : null;
+  const rows = [
+    ["Color", rec.color && `<i class="sw" style="background:${COLORS[rec.color].hex}"></i>${COLORS[rec.color].label}`],
+    ["Texture", rec.texture && rec.texture !== "unsure" ? `${escapeHtml(rec.texture)} <span class="muted">(${FAMILIES[TEXTURES[rec.texture]].label})</span>` : null],
+    ["Structure", STRUCTURES[rec.structure]?.label],
+    ["Moisture", MOISTURE[rec.moisture]], ["Roots", ROOTS[rec.roots]], ["Plant bits", ORGANIC[rec.organic]],
+    ["Rocks", ROCKS[rec.rocks]], ["Smell", SMELLS[rec.smell]],
+    ["Critters", rec.critters != null || rec.critterKinds ? `${rec.critters ?? ""} ${rec.critterKinds ? "(" + rec.critterKinds.split(",").map((c) => CRITTERS[c]).join(", ") + ")" : ""}` : null],
+    ["pH", rec.phV != null ? `<b>${rec.phV}</b>` : null],
+    ["Nitrate / N", lvl("n")], ["Phosphorus", lvl("p")], ["Potassium", lvl("k")], ["Ammonia", lvl("nh3")],
+  ].filter(([, v]) => v);
+  $("rcTable").innerHTML = rows.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join("");
+
+  const m = interpret(rec);
+  $("rcMeaning").innerHTML = m.length
+    ? m.map((x) => `<div class="meaning"><span class="tag">${escapeHtml(x.topic)}</span>${escapeHtml(x.text)}</div>`).join("")
+    : `<p class="muted">Add chemistry or texture results next time to get more here.</p>`;
+
+  const fam = (f) => (f ? FAMILIES[f].label : null);
   const row = (k, a, b) => `<tr><th>${k}</th><td>${escapeHtml(a ?? "—")}</td><td>${escapeHtml(b ?? "—")}</td></tr>`;
-  const myFam = TEXTURES[rec.texture];
   $("cmp").innerHTML =
-    row("Texture", rec.texture, dbv?.dbTexture) +
-    row("Family", fam(myFam), fam(familyOf(dbv?.dbTexture))) +
-    row("pH", rec.ph, dbv?.dbPh) +
-    row("Soil series", "", dbv?.dbSeries) +
-    row("Drainage", "", dbv?.dbDrain);
+    row("Texture", rec.texture !== "unsure" ? rec.texture : null, dbv?.dbTexture) +
+    row("Family", fam(TEXTURES[rec.texture]), fam(familyOf(dbv?.dbTexture))) +
+    row("pH", rec.phV, dbv?.dbPh) +
+    row("Organic matter", null, dbv?.dbOm != null ? `${dbv.dbOm}%` : null) +
+    row("Soil series", null, dbv?.dbSeries) +
+    row("Drainage", null, dbv?.dbDrain);
   $("dbNote").textContent = dbv
-    ? `Survey map unit: ${dbv.dbMap}. Survey values are for the top layer of the main soil in that map unit.`
-    : "No soil survey data for this spot (cities and water are often unmapped).";
-  $("soilweb").href = soilwebUrl(rec.lat100 / 100, rec.lng100 / 100);
-  $("form").hidden = true; $("done").hidden = false; window.scrollTo(0, 0);
+    ? `Survey map unit: ${dbv.dbMap}. Survey values are for the top layer of the main soil in that map unit, mapped at the scale of whole fields.`
+    : "No soil survey data for this spot (towns, buildings and water are often unmapped, and bagged potting soil isn't on any map).";
+  $("soilweb").href = soilwebUrl(rec.lat, rec.lng);
+
+  const prev = (store.get(MINE) || []).find((x) => x.id === id)?.reflect || {};
+  for (const r of ["r1", "r2", "r3", "r4"]) $(r).value = prev[r] || "";
+  $("reflectMsg").textContent = prev.saved ? "Saved. You can edit and save again." : "";
+  $("reflectBtn").disabled = false;
+  $("form").hidden = true; $("mine").hidden = true; $("report").hidden = false; window.scrollTo(0, 0);
 }
 
-$("againBtn").onclick = () => location.reload();
+$("reflectBtn").onclick = async () => {
+  if (!current) return;
+  const ans = {};
+  for (const r of ["r1", "r2", "r3", "r4"]) { const v = $(r).value.trim(); if (v) ans[r] = v.slice(0, 600); }
+  if (!Object.keys(ans).length) { $("reflectMsg").textContent = "Type at least one answer first."; return; }
+  $("reflectBtn").disabled = true; $("reflectMsg").textContent = "Saving…";
+  try {
+    await ready;
+    await set(ref(db, `${base}/samples/${current.id}/reflect`), { ...ans, ts: serverTimestamp() });
+    const mine = store.get(MINE) || [];
+    const me = mine.find((x) => x.id === current.id);
+    if (me) { me.reflect = { ...ans, saved: true }; store.set(MINE, mine); }
+    $("reflectMsg").textContent = "✅ Saved. You can edit and save again.";
+  } catch (e) {
+    console.error(e); $("reflectMsg").textContent = "Couldn't save. Check your connection and try again.";
+  }
+  $("reflectBtn").disabled = false;
+};
+
+$("againBtn").onclick = () => { location.href = location.pathname + location.search; };
+
+// ---- my earlier samples (this phone) --------------------------------------
+function showMine() {
+  const mine = store.get(MINE) || [];
+  if (!mine.length) return;
+  $("mine").hidden = false;
+  $("mine").innerHTML = `<b>Your soil reports:</b> ` + mine.map((x, i) =>
+    `<button class="chip" type="button" data-i="${i}">${escapeHtml(x.rec.label)}</button>`).join(" ");
+  $("mine").querySelectorAll("button").forEach((b) => b.onclick = () => {
+    const x = mine[+b.dataset.i];
+    showReport(x.id, x.rec, x.dbv, { soil: x.soilPhoto });
+  });
+}
+showMine();
 ready.then((u) => { if (!u) $("saveMsg").textContent = "Couldn't connect. Reload the page."; });
 </script>
 </body>
